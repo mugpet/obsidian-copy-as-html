@@ -165,18 +165,6 @@ svg.svg-icon {
   background-color: white !important;
 }
 
-ul.contains-task-list {
-  padding-left: 0;
-  list-style: none;
-}
-
-ul.contains-task-list ul.contains-task-list {
-  padding-left: 2em;
-}
-
-ul.contains-task-list li input[type="checkbox"] {
-  margin-right: .5em;
-}
 
 .callout-table,
 .callout-table tr,
@@ -198,6 +186,79 @@ ul.contains-task-list li input[type="checkbox"] {
   width: 100%;
   background-color: #f5f5f5;
 }
+
+    
+body {
+	color: #353535;
+	font-size: 14px;
+}
+
+body p img {
+	max-width: 720px;
+}  
+   
+  
+   
+ul.contains-task-list {
+	padding-left: 0;
+	list-style: none;
+	/*
+	display: flex;
+	flex-direction: column;
+	flex: 1;*/
+  }
+
+  ul.contains-task-list ul.contains-task-list {
+	padding-left: 2em;
+  }
+
+  ul.contains-task-list li input[type="checkbox"] {
+	margin-right: .5em;
+  }
+
+
+  
+  li.task-list-item {
+	display: flex;
+	flex: 1;
+	flex-direction: row;
+      margin-bottom: 0.5em;
+  }
+  
+   
+  li.task-list-item span.checkbox {
+	margin-right: 0.5em;
+  }
+    
+    
+  li.task-list-item span.checkbox-text {
+	display: block;
+	flex: 1;
+  }
+  
+  .internal-link {
+	color: #108060; 
+	font-weight: 500;
+}
+
+/*
+span.checkbox {
+	background: #e5e5e5;
+	text-align: center;
+	padding: 1px;
+	overflow: hidden;
+  }
+
+  span.checkbox.is-checked {
+	background: #40d560;
+	text-align: center;
+	padding: 1px;
+	overflow: hidden;
+  }
+*/
+
+
+
 `;
 
 // Thank you again Olivier Balfour !
@@ -309,8 +370,7 @@ class DocumentRenderer {
 	private readonly vaultUriPrefix: string;
 
 	constructor(private view: MarkdownView, private app: App,
-				private options: DocumentRendererOptions = documentRendererDefaults)
-	{
+		private options: DocumentRendererOptions = documentRendererDefaults) {
 		this.vaultPath = (this.app.vault.getRoot().vault.adapter as FileSystemAdapter).getBasePath()
 			.replace(/\\/g, '/');
 
@@ -505,7 +565,10 @@ class DocumentRenderer {
 		}
 
 		this.replaceInternalLinks(node);
-		this.makeCheckboxesReadOnly(node);
+		// this.makeCheckboxesReadOnly(node);
+		this.wrapListItemContentInSpan(node)
+		this.addEmojiCheckbox(node);
+		this.removeInputCheckboxes(node); // remove the input textbox
 		this.removeCollapseIndicators(node);
 		this.removeButtons(node);
 		this.removeStrangeNewWorldsLinks(node);
@@ -537,15 +600,57 @@ class DocumentRenderer {
 	}
 
 	private replaceInternalLinks(node: HTMLElement) {
-		node.querySelectorAll('a.internal-link')
-			.forEach(node => {
-				console.log(node.getText());
-				const textNode = node.parentNode!.createEl('span');
-				textNode.innerText = node.getText();
-				textNode.className = 'internal-link';
-				node.parentNode!.replaceChild(textNode, node);
-				console.log(`replacing with`, textNode)
+		const n = node.querySelectorAll('a.internal-link')
+		n.forEach(node => {
+			console.log(node.getText());
+			const textNode = node.parentNode!.createEl('span');
+			textNode.innerText = node.getText();
+			textNode.className = 'internal-link';
+			node.parentNode!.replaceChild(textNode, node);
+			console.log(`replacing with`, textNode)
+		});
+	}
+
+	private wrapListItemContentInSpan(node: HTMLElement) {
+		node.querySelectorAll('.task-list-item')
+			.forEach((listItem: HTMLElement) => {
+				const listItemContent = listItem.innerHTML;
+	
+				// Replace listItem content with the new span-wrapped content
+				listItem.innerHTML =`<span class="checkbox-text">${listItemContent}</span>`;
+	
+				this.wrapListItemContentInSpan(listItem) // traverse the tree
 			});
+	}
+
+	private addEmojiCheckbox(node: HTMLElement) {
+		node.querySelectorAll('.task-list-item')
+			.forEach((listItem: HTMLElement) => {
+				console.log("replaceListItemWithSpan NODE innerHTML: " + listItem.innerHTML);
+				// console.log("replaceListItemWithSpan NODE outerHTML: " + listItem.outerHTML);
+				console.log("replaceListItemWithSpan: " + listItem.innerText);
+				console.log("replaceListItemWithSpan getElementsByClassName hasClass: " + listItem.classList.contains("is-checked"));
+	
+				const checkboxNode = document.createElement('span');
+				const checkbox = listItem.classList.contains("is-checked") ? "🟦" : "⬜"
+				checkboxNode.innerText = checkbox;
+				checkboxNode.className = 'checkbox'+ (listItem.classList.contains("is-checked") ? " is-checked":"");
+				// checkboxNode.style.marginRight = "0.5em"
+	
+	
+				// Clear listItem content and append the new spans
+				listItem.insertBefore(checkboxNode, listItem.firstChild)
+
+				console.log(`replacing with`, listItem);
+			});
+	}
+
+	private removeInputCheckboxes(node: HTMLElement) {
+		node.querySelectorAll('input[type="checkbox"]')
+			.forEach(node => {
+				node.remove()
+			});
+
 	}
 
 	private makeCheckboxesReadOnly(node: HTMLElement) {
@@ -641,7 +746,7 @@ class DocumentRenderer {
 				}
 				else {
 					// remove from reference
-					const span = link.parentNode!.createEl('span', {text: link.getText(), cls: 'footnote-link'})
+					const span = link.parentNode!.createEl('span', { text: link.getText(), cls: 'footnote-link' })
 					link.parentNode!.replaceChild(span, link);
 				}
 			});
@@ -830,11 +935,11 @@ class DocumentRenderer {
 	 * - heading is present if link ends with `#some-header`
 	 * - blockReference is present if link ends with `#^tag` (tag is a hex string)
 	 */
-	private getLinkParts(path: string): { path: string, extension: string, heading?: string, blockReference?: string} {
+	private getLinkParts(path: string): { path: string, extension: string, heading?: string, blockReference?: string } {
 		// split at right-most occurence
 		const hashIndex = path.lastIndexOf("#");
 		const [file, anchor] = hashIndex > 0
-			? [path.slice(0, hashIndex), path.slice(hashIndex+1)]
+			? [path.slice(0, hashIndex), path.slice(hashIndex + 1)]
 			: [path, ''];
 
 		return {
@@ -865,14 +970,14 @@ class CopyingToHtmlModal extends Modal {
 	}
 
 	onOpen() {
-		let {titleEl, contentEl} = this;
+		let { titleEl, contentEl } = this;
 		titleEl.setText('Copying to clipboard');
 		this._progress = contentEl.createEl('progress');
 		this._progress.style.width = '100%';
 	}
 
 	onClose() {
-		let {contentEl} = this;
+		let { contentEl } = this;
 		contentEl.empty();
 	}
 }
@@ -891,13 +996,13 @@ class CopyDocumentAsHTMLSettingsTab extends PluginSettingTab {
 		createFragment((documentFragment) => (documentFragment.createDiv().innerHTML = html));
 
 	display(): void {
-		const {containerEl} = this;
+		const { containerEl } = this;
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', {text: 'Copy document as HTML Settings'});
+		containerEl.createEl('h2', { text: 'Copy document as HTML Settings' });
 
-		containerEl.createEl('h3', {text: 'Compatibility'});
+		containerEl.createEl('h3', { text: 'Compatibility' });
 
 		new Setting(containerEl)
 			.setName('Convert SVG files to bitmap')
@@ -930,7 +1035,7 @@ class CopyDocumentAsHTMLSettingsTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		containerEl.createEl('h3', {text: 'Rendering'});
+		containerEl.createEl('h3', { text: 'Rendering' });
 
 		new Setting(containerEl)
 			.setName('Remove front-matter sections')
@@ -979,7 +1084,7 @@ class CopyDocumentAsHTMLSettingsTab extends PluginSettingTab {
 				.addOption(FootnoteHandling.LEAVE_LINK.toString(), 'Display and link')
 				.setValue(this.plugin.settings.footnoteHandling.toString())
 				.onChange(async (value) => {
-					switch(value) {
+					switch (value) {
 						case FootnoteHandling.TITLE_ATTRIBUTE.toString():
 							this.plugin.settings.footnoteHandling = FootnoteHandling.TITLE_ATTRIBUTE;
 							break;
